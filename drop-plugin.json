@@ -1,0 +1,18 @@
+{
+  "id": "drop-payment-btcpay",
+  "name": "BTCPay Server",
+  "version": "0.1.0",
+  "description": "BTCPay Server cryptocurrency payment gateway plugin for Drop (#21).",
+  "author": "Heretek Games",
+  "apiVersion": 2,
+  "trust": "trusted",
+  "storageVersion": 1,
+  "capabilities": [
+    "commerce:payment",
+    "network"
+  ],
+  "targets": [
+    "server"
+  ],
+  "entry": "dist/src/index.js"
+}
