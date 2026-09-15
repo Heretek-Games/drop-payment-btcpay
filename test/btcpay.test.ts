@@ -46,12 +46,18 @@ test("resolveBtcpayConfig prefers storage over environment", async () => {
   const config = await resolveBtcpayConfig(
     createStorage({
       [BTCPAY_STORAGE_KEYS.apiBaseUrl]: "https://stored.example.org/api/v1",
+      [BTCPAY_STORAGE_KEYS.storeId]: "stored-store",
       [BTCPAY_STORAGE_KEYS.webhookSecret]: "stored-secret",
     }),
-    { BTCPAY_BASE_URL: "https://env.example.org/api/v1", BTCPAY_API_KEY: "env-key" },
+    {
+      BTCPAY_BASE_URL: "https://env.example.org/api/v1",
+      BTCPAY_STORE_ID: "env-store",
+      BTCPAY_API_KEY: "env-key",
+    },
   );
   assert.deepEqual(config, {
     apiBaseUrl: "https://stored.example.org/api/v1",
+    storeId: "stored-store",
     apiKey: "env-key",
     webhookSecret: "stored-secret",
   });
@@ -60,11 +66,13 @@ test("resolveBtcpayConfig prefers storage over environment", async () => {
 test("resolveBtcpayConfig falls back to environment", async () => {
   const config = await resolveBtcpayConfig(createStorage({}), {
     BTCPAY_BASE_URL: "https://env.example.org/api/v1",
+    BTCPAY_STORE_ID: "env-store",
     BTCPAY_API_KEY: "env-key",
     BTCPAY_WEBHOOK_SECRET: "env-secret",
   });
   assert.deepEqual(config, {
     apiBaseUrl: "https://env.example.org/api/v1",
+    storeId: "env-store",
     apiKey: "env-key",
     webhookSecret: "env-secret",
   });
@@ -73,6 +81,7 @@ test("resolveBtcpayConfig falls back to environment", async () => {
 test("resolveBtcpayConfig has no placeholder default", async () => {
   const config = await resolveBtcpayConfig(createStorage({}), {});
   assert.equal(config.apiBaseUrl, undefined);
+  assert.equal(config.storeId, undefined);
   assert.equal(config.webhookSecret, undefined);
 });
 
@@ -81,6 +90,16 @@ test("createPaymentIntent requires a configured base URL", async () => {
   await assert.rejects(
     gateway.createPaymentIntent({ orderId: "o", amount: 1, currency: "USD" }),
     /base URL is not configured/,
+  );
+});
+
+test("createPaymentIntent requires a configured store id", async () => {
+  const gateway = new BtcpayGateway("key", async () => new Response("{}"), {
+    apiBaseUrl: API_BASE,
+  });
+  await assert.rejects(
+    gateway.createPaymentIntent({ orderId: "o", amount: 1, currency: "USD" }),
+    /store id is not configured/,
   );
 });
 
@@ -109,6 +128,7 @@ test("createPaymentIntent posts JSON to the configured deployment", async () => 
   };
   const gateway = new BtcpayGateway("api-key", fetchFn, {
     apiBaseUrl: `${API_BASE}/`,
+    storeId: "store-1",
   });
   const result = await gateway.createPaymentIntent({
     orderId: "order-1",
@@ -116,7 +136,7 @@ test("createPaymentIntent posts JSON to the configured deployment", async () => 
     currency: "USD",
     metadata: { gameId: "g1" },
   });
-  assert.equal(calls[0].url, `${API_BASE}/invoices`);
+  assert.equal(calls[0].url, `${API_BASE}/stores/store-1/invoices`);
   const headers = new Headers(calls[0].init?.headers);
   assert.equal(headers.get("content-type"), "application/json");
   assert.equal(headers.get("authorization"), "Bearer api-key");
@@ -148,6 +168,7 @@ test("createPaymentIntent rejects invalid base URLs", async () => {
 test("createPaymentIntent surfaces BTCPay API errors", async () => {
   const gateway = new BtcpayGateway("api-key", async () => new Response("nope", { status: 403 }), {
     apiBaseUrl: API_BASE,
+    storeId: "store-1",
   });
   await assert.rejects(
     gateway.createPaymentIntent({ orderId: "o", amount: 1, currency: "USD" }),

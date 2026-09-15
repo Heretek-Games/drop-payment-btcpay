@@ -28,16 +28,23 @@ export interface BtcpayGatewayOptions {
    * until the host configures a real deployment URL.
    */
   apiBaseUrl?: string;
+  /**
+   * BTCPay store id. Invoices are created at
+   * `{apiBaseUrl}/stores/{storeId}/invoices`; without it checkout is rejected.
+   */
+  storeId?: string;
   /** Webhook signing secret used for the `BTCPay-Sig` header. */
   webhookSecret?: string;
 }
 
 /**
  * Storage keys the host may use to configure the gateway; environment
- * variables (`BTCPAY_BASE_URL`, `BTCPAY_WEBHOOK_SECRET`) are the fallback.
+ * variables (`BTCPAY_BASE_URL`, `BTCPAY_STORE_ID`, `BTCPAY_WEBHOOK_SECRET`) are
+ * the fallback.
  */
 export const BTCPAY_STORAGE_KEYS = {
   apiBaseUrl: "apiBaseUrl",
+  storeId: "storeId",
   webhookSecret: "webhookSecret",
 } as const;
 
@@ -86,13 +93,15 @@ export async function resolveBtcpayConfig(
   storage: Pick<PluginStorage, "get">,
   env: Record<string, string | undefined> = process.env,
 ): Promise<BtcpayGatewayOptions & { apiKey?: string }> {
-  const [storedBaseUrl, storedWebhookSecret] = await Promise.all([
+  const [storedBaseUrl, storedStoreId, storedWebhookSecret] = await Promise.all([
     storage.get<string>(BTCPAY_STORAGE_KEYS.apiBaseUrl),
+    storage.get<string>(BTCPAY_STORAGE_KEYS.storeId),
     storage.get<string>(BTCPAY_STORAGE_KEYS.webhookSecret),
   ]);
   return {
     apiBaseUrl:
       storedBaseUrl ?? env["BTCPAY_BASE_URL"] ?? undefined,
+    storeId: storedStoreId ?? env["BTCPAY_STORE_ID"] ?? undefined,
     apiKey: env["BTCPAY_API_KEY"],
     webhookSecret:
       storedWebhookSecret ?? env["BTCPAY_WEBHOOK_SECRET"] ?? undefined,
@@ -251,6 +260,16 @@ export class BtcpayGateway implements PaymentGateway {
     return apiBaseUrl;
   }
 
+  private requireStoreId(): string {
+    const storeId = this.options.storeId?.trim();
+    if (!storeId) {
+      throw new Error(
+        "BTCPay Server store id is not configured (set BTCPAY_STORE_ID or the plugin storeId storage key)",
+      );
+    }
+    return storeId;
+  }
+
   async createPaymentIntent(
     req: PaymentIntentRequest,
   ): Promise<PaymentIntentResult> {
@@ -258,22 +277,26 @@ export class BtcpayGateway implements PaymentGateway {
       throw new Error("BTCPay Server API key is not configured");
     }
     const apiBaseUrl = this.requireApiBaseUrl();
-    const response = await this.fetchFn(`${apiBaseUrl}/invoices`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.secretKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        orderId: req.orderId,
-        amount: req.amount,
-        currency: req.currency,
-        metadata: {
-          orderId: req.orderId,
-          ...(req.metadata ?? {}),
+    const storeId = this.requireStoreId();
+    const response = await this.fetchFn(
+      `${apiBaseUrl}/stores/${encodeURIComponent(storeId)}/invoices`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+          "Content-Type": "application/json",
         },
-      }),
-    });
+        body: JSON.stringify({
+          orderId: req.orderId,
+          amount: req.amount,
+          currency: req.currency,
+          metadata: {
+            orderId: req.orderId,
+            ...(req.metadata ?? {}),
+          },
+        }),
+      },
+    );
     if (!response.ok) {
       throw new Error(`BTCPay Server checkout failed: ${response.status}`);
     }
@@ -345,6 +368,7 @@ export default class BtcpayPlugin implements ServerPlugin {
     ctx.registerPaymentGateway(
       new BtcpayGateway(config.apiKey, ctx.fetch.bind(ctx) as HttpRequest, {
         apiBaseUrl: config.apiBaseUrl,
+        storeId: config.storeId,
         webhookSecret: config.webhookSecret,
       }),
     );
@@ -354,6 +378,11 @@ export default class BtcpayPlugin implements ServerPlugin {
     if (!config.apiBaseUrl) {
       ctx.logger.warn(
         "BTCPay Server base URL is not configured; checkout calls will be rejected",
+      );
+    }
+    if (!config.storeId) {
+      ctx.logger.warn(
+        "BTCPay Server store id is not configured; checkout calls will be rejected",
       );
     }
     if (!config.webhookSecret) {
