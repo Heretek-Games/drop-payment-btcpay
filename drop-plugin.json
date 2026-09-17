@@ -9,7 +9,8 @@
   "storageVersion": 1,
   "capabilities": [
     "commerce:payment",
-    "network"
+    "network",
+    "storage"
   ],
   "targets": [
     "server"

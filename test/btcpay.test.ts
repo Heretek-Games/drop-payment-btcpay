@@ -36,7 +36,7 @@ function settledEvent(orderId: string): string {
 }
 
 test("drop-payment-btcpay registers a payment gateway", async () => {
-  const ctx = new MockPluginContext("drop-payment-btcpay", ["commerce:payment", "network"]);
+  const ctx = new MockPluginContext("drop-payment-btcpay", ["commerce:payment", "storage", "network"]);
   await new Plugin().init(ctx);
   assert.equal(ctx.paymentGateways.size, 1);
   assert.equal(ctx.paymentGateways.get("btcpay")?.name, "BTCPay Server");

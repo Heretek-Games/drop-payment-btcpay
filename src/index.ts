@@ -360,7 +360,7 @@ export default class BtcpayPlugin implements ServerPlugin {
     name: "BTCPay Server",
     version: "0.1.0",
     apiVersion: 2,
-    capabilities: ["commerce:payment" as const, "network" as const],
+    capabilities: ["commerce:payment" as const, "storage" as const, "network" as const],
   };
 
   async init(ctx: PluginContext): Promise<void> {
