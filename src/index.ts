@@ -276,6 +276,11 @@ export class BtcpayGateway implements PaymentGateway {
     if (!this.secretKey) {
       throw new Error("BTCPay Server API key is not configured");
     }
+    if (!Number.isFinite(req.amount) || req.amount <= 0) {
+      throw new Error(
+        `Invoice amount must be a positive finite number, received: ${req.amount}`,
+      );
+    }
     const apiBaseUrl = this.requireApiBaseUrl();
     const storeId = this.requireStoreId();
     const response = await this.fetchFn(

@@ -113,6 +113,23 @@ test("createPaymentIntent requires an API key", async () => {
   );
 });
 
+test("createPaymentIntent validates that amount is a positive finite number", async () => {
+  const gateway = new BtcpayGateway("api-key", async () => new Response("{}"), {
+    apiBaseUrl: API_BASE,
+    storeId: "store-123",
+  });
+  for (const invalid of [0, -1, NaN, Infinity, -Infinity]) {
+    await assert.rejects(
+      gateway.createPaymentIntent({
+        orderId: "o",
+        amount: invalid,
+        currency: "USD",
+      }),
+      /Invoice amount must be a positive finite number/,
+    );
+  }
+});
+
 test("createPaymentIntent posts JSON to the configured deployment", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetchFn: HttpRequest = async (url, init) => {
